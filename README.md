@@ -4,11 +4,9 @@ A macOS teleprompter with built-in speech coaching. Track your pace, filler word
 
 ![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue) ![Swift](https://img.shields.io/badge/Swift-5-orange) ![License](https://img.shields.io/badge/license-MIT-green)
 
-## Demo
+## How it works
 
-https://github.com/user-attachments/assets/demo.mp4
-
-<video src="screenshots/demo.mp4" width="100%" controls></video>
+https://github.com/abhitsian/speakcoach/raw/main/screenshots/demo.mp4
 
 Load your script, hit present, and speak — words highlight in real time as you talk. The app tracks your pace, filler words, pauses, and consistency throughout. When you're done, you get a coaching report with a score and breakdown of what to improve.
 
