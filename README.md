@@ -4,8 +4,15 @@ A macOS teleprompter with built-in speech coaching. Track your pace, filler word
 
 ![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue) ![Swift](https://img.shields.io/badge/Swift-5-orange) ![License](https://img.shields.io/badge/license-MIT-green)
 
+## Screenshots
+
+| Home Dashboard | Editor | Settings |
+|:-:|:-:|:-:|
+| ![Home](screenshots/home-dashboard.png) | ![Editor](screenshots/main-editor.png) | ![Settings](screenshots/settings.png) |
+
 ## Features
 
+- **Home dashboard** — At-a-glance stats, practice streak, weekly goals, personal bests, and quick actions
 - **Teleprompter** — Full-screen or floating overlay with word-by-word tracking as you speak
 - **Speech coaching** — Real-time WPM, filler word detection, pause tracking, pace consistency scoring
 - **Meeting mode** — Track unstructured meetings with talking points checklist, live transcript, and post-meeting reports

@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var meetingTitle = ""
     @State private var talkingPointsText = ""
     @State private var showMeetingSetup = false
+    @State private var showingHome = true
     @FocusState private var isTextFocused: Bool
 
     private let defaultText = """
@@ -74,8 +75,94 @@ Happy speaking! [wave]
             navSidebar
 
             // Main content
-            ZStack {
-                VStack(spacing: 0) {
+            if showingHome {
+                HomeView(
+                    onNewScript: {
+                        service.pages = [""]
+                        service.currentPageIndex = 0
+                        service.currentFileURL = nil
+                        service.savedPages = [""]
+                        showingHome = false
+                        isTextFocused = true
+                    },
+                    onStartMeeting: { showMeetingSetup = true },
+                    onOpenLibrary: { showLibrary = true },
+                    onPresentCurrent: {
+                        if hasAnyContent { showingHome = false; run() }
+                    }
+                )
+            } else {
+                editorContent
+            }
+        }
+        .alert(dropAlertTitle, isPresented: Binding(get: { dropError != nil }, set: { if !$0 { dropError = nil } })) {
+            Button("OK") { dropError = nil }
+        } message: {
+            Text(dropError ?? "")
+        }
+        .frame(minWidth: 600, minHeight: 400)
+        .background(Color(nsColor: .textBackgroundColor))
+        .sheet(isPresented: $showSettings) {
+            SettingsView(settings: NotchSettings.shared)
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+        }
+        .sheet(item: $completedSession) { session in
+            SessionReportView(session: session)
+        }
+        .sheet(isPresented: $showSessionHistory) {
+            SessionHistoryView(store: SessionStore.shared)
+        }
+        .sheet(isPresented: $showLibrary) {
+            ScriptLibraryView { script in
+                service.loadFromLibrary(script)
+                showingHome = false
+            }
+        }
+        .sheet(isPresented: $showMeetingHistory) {
+            MeetingHistoryView()
+        }
+        .sheet(isPresented: $showMeetingSetup) {
+            meetingSetupSheet
+        }
+        .sheet(item: $completedMeeting) { meeting in
+            MeetingDetailView(meeting: meeting)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
+            showSettings = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openAbout)) { _ in
+            showAbout = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isRunning = service.overlayController.isShowing
+        }
+        .onChange(of: service.currentFileURL) { _, _ in
+            showingHome = false
+        }
+        .onAppear {
+            if service.pages.count == 1 && service.pages[0].isEmpty {
+                service.pages[0] = defaultText
+            }
+            if service.overlayController.isShowing {
+                isRunning = true
+            }
+            if SpeakCoachService.shared.launchedExternally {
+                DispatchQueue.main.async {
+                    for window in NSApp.windows where !(window is NSPanel) {
+                        window.orderOut(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Editor Content
+
+    private var editorContent: some View {
+        ZStack {
+            VStack(spacing: 0) {
                     // Editor
                     TextEditor(text: currentText)
                         .font(.system(size: 17, weight: .regular, design: .default))
@@ -221,71 +308,7 @@ Happy speaking! [wave]
                     .allowsHitTesting(isDroppingPresentation)
             }
         }
-        .alert(dropAlertTitle, isPresented: Binding(get: { dropError != nil }, set: { if !$0 { dropError = nil } })) {
-            Button("OK") { dropError = nil }
-        } message: {
-            Text(dropError ?? "")
-        }
-        .frame(minWidth: 600, minHeight: 400)
-        .background(Color(nsColor: .textBackgroundColor))
-        .sheet(isPresented: $showSettings) {
-            SettingsView(settings: NotchSettings.shared)
-        }
-        .sheet(isPresented: $showAbout) {
-            AboutView()
-        }
-        .sheet(item: $completedSession) { session in
-            SessionReportView(session: session)
-        }
-        .sheet(isPresented: $showSessionHistory) {
-            SessionHistoryView(store: SessionStore.shared)
-        }
-        .sheet(isPresented: $showLibrary) {
-            ScriptLibraryView { script in
-                service.loadFromLibrary(script)
-            }
-        }
-        .sheet(isPresented: $showMeetingHistory) {
-            MeetingHistoryView()
-        }
-        .sheet(isPresented: $showMeetingSetup) {
-            meetingSetupSheet
-        }
-        .sheet(item: $completedMeeting) { meeting in
-            MeetingDetailView(meeting: meeting)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
-            showSettings = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openAbout)) { _ in
-            showAbout = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Sync button state when app is re-activated (e.g. dock click)
-            isRunning = service.overlayController.isShowing
-        }
-        .onAppear {
-            // Set default text for the first page if empty
-            if service.pages.count == 1 && service.pages[0].isEmpty {
-                service.pages[0] = defaultText
-            }
-            // Sync button state with overlay
-            if service.overlayController.isShowing {
-                isRunning = true
-            }
-            if SpeakCoachService.shared.launchedExternally {
-                DispatchQueue.main.async {
-                    for window in NSApp.windows where !(window is NSPanel) {
-                        window.orderOut(nil)
-                    }
-                }
-            } else {
-                isTextFocused = true
-            }
-        }
-    }
 
-    // MARK: - Navigation Sidebar
 
     private var navSidebar: some View {
         VStack(spacing: 0) {
@@ -300,6 +323,7 @@ Happy speaking! [wave]
 
     private var sidebarActions: some View {
         VStack(spacing: 2) {
+            homeButton
             sidebarButton(icon: "gearshape", label: "Settings") { showSettings = true }
             sidebarButton(icon: "books.vertical", label: "Library") { showLibrary = true }
             sidebarButton(icon: "waveform.and.mic", label: "Meetings") { showMeetingHistory = true }
@@ -309,6 +333,29 @@ Happy speaking! [wave]
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
+    }
+
+    private var homeButton: some View {
+        Button { showingHome = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "house")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(showingHome ? .white : .secondary)
+                    .frame(width: 18)
+                Text("Home")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(showingHome ? .white : .primary)
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(showingHome ? Color.accentColor : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var sidebarDivider: some View {
@@ -330,6 +377,7 @@ Happy speaking! [wave]
                 withAnimation(.easeInOut(duration: 0.2)) {
                     service.pages.append("")
                     service.currentPageIndex = service.pages.count - 1
+                    showingHome = false
                 }
             } label: {
                 Image(systemName: "plus")
@@ -360,6 +408,7 @@ Happy speaking! [wave]
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) {
                 service.currentPageIndex = index
+                showingHome = false
             }
         } label: {
             HStack(spacing: 8) {
