@@ -48,6 +48,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 window.tabbingMode = .disallowed
                 window.collectionBehavior.remove(.fullScreenPrimary)
                 window.collectionBehavior.insert(.fullScreenNone)
+                window.isMovableByWindowBackground = true
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+                // Ensure the window is resizable
+                window.styleMask.insert(.resizable)
+                window.styleMask.insert(.miniaturizable)
+                window.styleMask.insert(.closable)
+                window.styleMask.insert(.titled)
+                window.minSize = NSSize(width: 600, height: 400)
             }
             self.removeUnwantedMenus()
         }
@@ -122,8 +131,7 @@ struct SpeakCoachApp: App {
                     }
                 }
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
 
         .commands {
             CommandGroup(replacing: .appInfo) {

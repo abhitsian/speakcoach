@@ -131,7 +131,7 @@ enum FontColorPreset: String, CaseIterable, Identifiable {
 // MARK: - Overlay Mode
 
 enum OverlayMode: String, CaseIterable, Identifiable {
-    case pinned, floating, fullscreen
+    case pinned, floating, page, fullscreen
 
     var id: String { rawValue }
 
@@ -139,6 +139,7 @@ enum OverlayMode: String, CaseIterable, Identifiable {
         switch self {
         case .pinned:     return "Pinned to Notch"
         case .floating:   return "Floating Window"
+        case .page:       return "Page"
         case .fullscreen: return "Fullscreen"
         }
     }
@@ -147,6 +148,7 @@ enum OverlayMode: String, CaseIterable, Identifiable {
         switch self {
         case .pinned:     return "Anchored below the notch at the top of your screen."
         case .floating:   return "A draggable window you can place anywhere. Always on top."
+        case .page:       return "A readable document view, like reading a script on a page."
         case .fullscreen: return "Fullscreen teleprompter on the selected display. Press Esc to stop."
         }
     }
@@ -155,6 +157,7 @@ enum OverlayMode: String, CaseIterable, Identifiable {
         switch self {
         case .pinned:     return "rectangle.topthird.inset.filled"
         case .floating:   return "macwindow.on.rectangle"
+        case .page:       return "doc.text"
         case .fullscreen: return "rectangle.fill"
         }
     }

@@ -19,9 +19,30 @@ class SpeakCoachService: NSObject, ObservableObject {
     var onOverlayDismissed: (() -> Void)?
     var launchedExternally = false
 
-    @Published var pages: [String] = [""]
+    override init() {
+        super.init()
+        loadPersistedPages()
+    }
+
+    @Published var pages: [String] = [""] {
+        didSet { persistPages() }
+    }
     @Published var currentPageIndex: Int = 0
     @Published var readPages: Set<Int> = []
+
+    private func persistPages() {
+        if let data = try? JSONEncoder().encode(pages) {
+            UserDefaults.standard.set(data, forKey: "speakcoach.pages")
+        }
+    }
+
+    private func loadPersistedPages() {
+        if let data = UserDefaults.standard.data(forKey: "speakcoach.pages"),
+           let saved = try? JSONDecoder().decode([String].self, from: data),
+           !saved.isEmpty {
+            pages = saved
+        }
+    }
 
     var hasNextPage: Bool {
         for i in (currentPageIndex + 1)..<pages.count {

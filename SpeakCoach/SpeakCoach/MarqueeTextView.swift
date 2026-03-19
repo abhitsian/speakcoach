@@ -107,6 +107,7 @@ struct SpeechScrollView: View {
                 highlightWords: !smoothScroll,
                 containerWidth: geo.size.width,
                 onWordTap: { charOffset in
+                    isUserScrolling = false
                     manualOffset = 0
                     onWordTap?(charOffset)
                     // Force recenter on tapped word
@@ -139,7 +140,7 @@ struct SpeechScrollView: View {
                 }
             }
             .onChange(of: highlightedCharCount) { _, _ in
-                if isListening && !smoothScroll {
+                if isListening && !smoothScroll && !isUserScrolling {
                     manualOffset = 0
                     recalcCenter(containerHeight: containerHeight)
                 }
@@ -172,13 +173,16 @@ struct SpeechScrollView: View {
             .overlay(
                 ScrollWheelView(
                     onScroll: { delta in
-                        let canScroll = smoothScroll ? isListening : !isListening
-                        guard canScroll else { return }
+                        // Always allow scrolling — in word tracking mode this lets
+                        // the user browse ahead/behind and tap a word to resume.
+                        guard smoothScroll ? isListening : true else { return }
 
-                        // Pause timer when user starts scrolling in smooth mode
-                        if smoothScroll && !isUserScrolling {
+                        if !isUserScrolling {
                             isUserScrolling = true
-                            onManualScroll?(true, 0)
+                            // Pause timer in classic/silence modes
+                            if smoothScroll {
+                                onManualScroll?(true, 0)
+                            }
                         }
 
                         let maxY = wordYPositions.values.max() ?? 0
@@ -210,6 +214,7 @@ struct SpeechScrollView: View {
                             isUserScrolling = false
                             onManualScroll?(false, newProgress)
                         } else {
+                            // Elastic bounds (word tracking & non-listening modes)
                             let maxY = wordYPositions.values.max() ?? 0
                             let containerHeight = geo.size.height
                             let upperBound = containerHeight * 0.5
@@ -220,6 +225,8 @@ struct SpeechScrollView: View {
                                     manualOffset = min(upperBound, max(lowerBound, manualOffset))
                                 }
                             }
+                            // In word tracking mode, keep isUserScrolling = true
+                            // so auto-centering stays paused until the user taps a word.
                         }
                     }
                 )

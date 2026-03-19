@@ -70,7 +70,11 @@ Happy speaking! [wave]
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        VStack(spacing: 0) {
+            // Drag handle bar
+            DragHandleBar()
+
+            HStack(spacing: 0) {
             // Left navigation sidebar
             navSidebar
 
@@ -95,12 +99,13 @@ Happy speaking! [wave]
                 editorContent
             }
         }
+        }
         .alert(dropAlertTitle, isPresented: Binding(get: { dropError != nil }, set: { if !$0 { dropError = nil } })) {
             Button("OK") { dropError = nil }
         } message: {
             Text(dropError ?? "")
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(minWidth: 600, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
         .sheet(isPresented: $showSettings) {
             SettingsView(settings: NotchSettings.shared)
@@ -142,8 +147,9 @@ Happy speaking! [wave]
             showingHome = false
         }
         .onAppear {
-            if service.pages.count == 1 && service.pages[0].isEmpty {
-                service.pages[0] = defaultText
+            let allEmpty = service.pages.allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if allEmpty {
+                service.pages = [defaultText]
             }
             if service.overlayController.isShowing {
                 isRunning = true
@@ -498,7 +504,7 @@ Happy speaking! [wave]
             NSApp.windows.first?.makeKeyAndOrderFront(nil)
         }
         service.readPages.removeAll()
-        service.currentPageIndex = 0
+        // Present from the page the user is currently viewing
         service.readCurrentPage()
         isRunning = true
     }
@@ -724,6 +730,35 @@ struct AboutView: View {
         .padding(24)
         .frame(width: 320)
         .background(.ultraThinMaterial)
+    }
+}
+
+// MARK: - Drag Handle Bar
+
+struct DragHandleBar: View {
+    @State private var isHovering = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.primary.opacity(isHovering ? 0.3 : 0.15))
+                    .frame(width: 36, height: 4)
+                Spacer()
+            }
+            .frame(height: 20)
+            .frame(maxWidth: .infinity)
+            .background(Color.primary.opacity(0.03))
+            .onHover { hovering in
+                isHovering = hovering
+                if hovering {
+                    NSCursor.openHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+        }
     }
 }
 

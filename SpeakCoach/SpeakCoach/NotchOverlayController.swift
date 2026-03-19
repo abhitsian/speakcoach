@@ -107,6 +107,8 @@ class NotchOverlayController: NSObject {
                 showPinned(settings: settings, screen: screen)
             case .floating:
                 showFloating(settings: settings, screenFrame: screenFrame)
+            case .page:
+                showPage(settings: settings, screenFrame: screenFrame)
             case .fullscreen:
                 break // handled above
             }
@@ -380,6 +382,45 @@ class NotchOverlayController: NSObject {
         panel.minSize = NSSize(width: 280, height: panelHeight)
         panel.maxSize = NSSize(width: 500, height: panelHeight + 350)
         panel.sharingType = NotchSettings.shared.hideFromScreenShare ? .none : .readOnly
+        panel.contentView = contentView
+
+        panel.orderFrontRegardless()
+        self.panel = panel
+
+        installKeyMonitor()
+    }
+
+    private func showPage(settings: NotchSettings, screenFrame: CGRect) {
+        let panelWidth: CGFloat = 600
+        let panelHeight: CGFloat = 500
+
+        let xPosition = screenFrame.midX - panelWidth / 2
+        let yPosition = screenFrame.midY - panelHeight / 2
+
+        let pageView = PageOverlayView(
+            content: overlayContent,
+            speechRecognizer: speechRecognizer
+        )
+        let contentView = NSHostingView(rootView: pageView)
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: xPosition, y: yPosition, width: panelWidth, height: panelHeight),
+            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.ignoresMouseEvents = false
+        panel.isMovableByWindowBackground = true
+        panel.title = "SpeakCoach"
+        panel.titlebarAppearsTransparent = true
+        panel.titleVisibility = .hidden
+        panel.minSize = NSSize(width: 400, height: 350)
+        panel.sharingType = settings.hideFromScreenShare ? .none : .readOnly
         panel.contentView = contentView
 
         panel.orderFrontRegardless()
@@ -1579,5 +1620,247 @@ struct FloatingOverlayView: View {
             Spacer()
         }
         .transition(.scale.combined(with: .opacity))
+    }
+}
+
+// MARK: - Page Overlay View
+
+struct PageOverlayView: View {
+    @Bindable var content: OverlayContent
+    @Bindable var speechRecognizer: SpeechRecognizer
+
+    private var words: [String] { content.words }
+    private var totalCharCount: Int { content.totalCharCount }
+    private var hasNextPage: Bool { content.hasNextPage }
+
+    @State private var appeared = false
+
+    @State private var timerWordProgress: Double = 0
+    @State private var isPaused: Bool = false
+    @State private var isUserScrolling: Bool = false
+    private let scrollTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
+
+    private var listeningMode: ListeningMode {
+        NotchSettings.shared.listeningMode
+    }
+
+    private func charOffsetForWordProgress(_ progress: Double) -> Int {
+        let wholeWord = Int(progress)
+        let frac = progress - Double(wholeWord)
+        var offset = 0
+        for i in 0..<min(wholeWord, words.count) {
+            offset += words[i].count + 1
+        }
+        if wholeWord < words.count {
+            offset += Int(Double(words[wholeWord].count) * frac)
+        }
+        return min(offset, totalCharCount)
+    }
+
+    private func wordProgressForCharOffset(_ charOffset: Int) -> Double {
+        var offset = 0
+        for (i, word) in words.enumerated() {
+            let end = offset + word.count
+            if charOffset <= end {
+                let frac = Double(charOffset - offset) / Double(max(1, word.count))
+                return Double(i) + frac
+            }
+            offset = end + 1
+        }
+        return Double(words.count)
+    }
+
+    private var effectiveCharCount: Int {
+        switch listeningMode {
+        case .wordTracking:
+            return speechRecognizer.recognizedCharCount
+        case .classic, .silencePaused:
+            return charOffsetForWordProgress(timerWordProgress)
+        }
+    }
+
+    var isDone: Bool {
+        totalCharCount > 0 && effectiveCharCount >= totalCharCount
+    }
+
+    private var isEffectivelyListening: Bool {
+        switch listeningMode {
+        case .wordTracking, .silencePaused:
+            return speechRecognizer.isListening
+        case .classic:
+            return !isPaused
+        }
+    }
+
+    private var progressPercent: Double {
+        guard totalCharCount > 0 else { return 0 }
+        return Double(effectiveCharCount) / Double(totalCharCount)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isDone {
+                pageDoneView
+            } else {
+                pagePrompterView
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: NSColor(white: 0.08, alpha: 1)))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .opacity(appeared ? 1 : 0)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.3)) { appeared = true }
+        }
+        .onChange(of: speechRecognizer.shouldDismiss) { _, shouldDismiss in
+            if shouldDismiss {
+                withAnimation(.easeIn(duration: 0.25)) { appeared = false }
+            }
+        }
+        .animation(.easeInOut(duration: 0.5), value: isDone)
+        .onChange(of: isDone) { _, done in
+            if done {
+                speechRecognizer.stop()
+                if !hasNextPage {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        speechRecognizer.shouldDismiss = true
+                    }
+                }
+            }
+        }
+        .onReceive(scrollTimer) { _ in
+            guard !isDone, !isUserScrolling else { return }
+            let speed = NotchSettings.shared.scrollSpeed
+            switch listeningMode {
+            case .classic:
+                if !isPaused { timerWordProgress += speed * 0.05 }
+            case .silencePaused:
+                if !isPaused && speechRecognizer.isListening && speechRecognizer.isSpeaking {
+                    timerWordProgress += speed * 0.05
+                }
+            case .wordTracking:
+                break
+            }
+        }
+        .onChange(of: content.totalCharCount) { _, _ in timerWordProgress = 0 }
+    }
+
+    private var pagePrompterView: some View {
+        VStack(spacing: 0) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(Color.white.opacity(0.08))
+                    Rectangle().fill(Color.accentColor)
+                        .frame(width: geo.size.width * progressPercent)
+                        .animation(.linear(duration: 0.2), value: progressPercent)
+                }
+            }
+            .frame(height: 3)
+
+            SpeechScrollView(
+                words: words,
+                highlightedCharCount: effectiveCharCount,
+                font: NotchSettings.shared.fontFamilyPreset.font(size: 22, weight: .medium),
+                highlightColor: NotchSettings.shared.fontColorPreset.color,
+                onWordTap: { charOffset in
+                    if listeningMode == .wordTracking {
+                        speechRecognizer.jumpTo(charOffset: charOffset)
+                    } else {
+                        timerWordProgress = wordProgressForCharOffset(charOffset)
+                    }
+                },
+                onManualScroll: { scrolling, newProgress in
+                    isUserScrolling = scrolling
+                    if !scrolling {
+                        timerWordProgress = max(0, min(Double(words.count), newProgress))
+                    }
+                },
+                smoothScroll: listeningMode != .wordTracking,
+                smoothWordProgress: timerWordProgress,
+                isListening: isEffectivelyListening
+            )
+            .padding(.horizontal, 32)
+            .padding(.top, 24)
+
+            HStack(alignment: .center, spacing: 12) {
+                AudioWaveformProgressView(
+                    levels: speechRecognizer.audioLevels,
+                    progress: progressPercent
+                )
+                .frame(width: 120, height: 24)
+
+                Spacer()
+
+                if content.pageCount > 1 {
+                    Text("Page \(content.currentPageIndex + 1) of \(content.pageCount)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                if listeningMode == .classic {
+                    Button { isPaused.toggle() } label: {
+                        Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        if speechRecognizer.isListening { speechRecognizer.stop() }
+                        else { speechRecognizer.resume() }
+                    } label: {
+                        Image(systemName: speechRecognizer.isListening ? "mic.fill" : "mic.slash.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(speechRecognizer.isListening ? .white.opacity(0.7) : .red.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if hasNextPage {
+                    Button { speechRecognizer.shouldAdvancePage = true } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button { speechRecognizer.shouldDismiss = true } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.04))
+        }
+    }
+
+    private var pageDoneView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.green)
+            Text("Done!")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+            if hasNextPage {
+                Button { speechRecognizer.shouldAdvancePage = true } label: {
+                    HStack(spacing: 6) {
+                        Text("Next Page").font(.system(size: 14, weight: .semibold))
+                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(Color.accentColor))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
     }
 }

@@ -2,6 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleExecutable</key>
+	<string>SpeakCoach</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.vaibhav.speakcoach</string>
+	<key>CFBundleName</key>
+	<string>SpeakCoach</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SpeakCoach uses speech recognition to track your words as you speak.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SpeakCoach needs microphone access to listen to your speech.</string>
 	<key>ATSApplicationFontsPath</key>
 	<string>.</string>
 	<key>CFBundleDocumentTypes</key>
